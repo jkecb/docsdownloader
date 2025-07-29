@@ -12,6 +12,7 @@ export class DocDownloader {
     this.outputDir = options.outputDir || './downloads';
     this.force = options.force || false;
     this.configFile = options.configFile;
+    this.includeMetadata = options.includeMetadata || false;
     this.visited = new Set();
     this.queue = [];
     this.siteConfig = {};
@@ -141,8 +142,9 @@ export class DocDownloader {
         });
         if (response.status === 200) {
           const contentType = response.headers['content-type']?.toLowerCase() || '';
-          // Accept markdown, plain text, or other text types
-          if (contentType.includes('text/') || contentType.includes('markdown') || contentType.includes('application/')) {
+          // Only accept if it's actually markdown or plain text, not HTML
+          if ((contentType.includes('text/plain') || contentType.includes('markdown')) && 
+              !contentType.includes('text/html')) {
             return mdUrl;
           }
         }
@@ -157,8 +159,28 @@ export class DocDownloader {
   async downloadMarkdown(mdUrl, originalUrl, siteDir) {
     try {
       const response = await axios.get(mdUrl, {timeout: 15000});
+      const contentType = response.headers['content-type']?.toLowerCase() || '';
+      
+      // Check if the response is actually HTML disguised as markdown
+      const content = response.data;
+      const isActuallyHtml = content.trim().startsWith('<!DOCTYPE html') || 
+                           content.trim().startsWith('<html') ||
+                           contentType.includes('text/html');
+      
+      if (isActuallyHtml) {
+        console.log(chalk.yellow(`⚠️ URL ${mdUrl} returned HTML, converting to markdown`));
+        // Parse HTML and convert to markdown
+        const $ = cheerio.load(content);
+        const extractedContent = this.extractContent($, originalUrl);
+        const markdown = this.turndown.turndown(extractedContent);
+        const filePath = this.getFilePath(originalUrl, new URL(originalUrl), siteDir);
+        await this.saveMarkdown(markdown, filePath, originalUrl);
+        return;
+      }
+      
+      // It's actual markdown content
       const filePath = this.getFilePath(originalUrl, new URL(originalUrl), siteDir);
-      await this.saveMarkdown(response.data, filePath, mdUrl);
+      await this.saveMarkdown(content, filePath, mdUrl);
     } catch (error) {
       console.warn(chalk.yellow(`⚠️ Failed to download markdown from ${mdUrl}: ${error.message}`));
     }
@@ -240,6 +262,25 @@ export class DocDownloader {
       }
     }
     
+    // For The Graph Nextra docs
+    if (hostname.includes('thegraph.com')) {
+      const nextraSelectors = [
+        'main article',
+        '.nextra-content',
+        '.nextra-body-full',
+        '[data-nextra-content]',
+        'main .container',
+        'main'
+      ];
+      
+      for (const selector of nextraSelectors) {
+        const content = $(selector).html();
+        if (content && content.trim().length > 100) {
+          return this.cleanContent(content);
+        }
+      }
+    }
+    
     // Common content selectors
     const selectors = [
       'main',
@@ -285,6 +326,9 @@ export class DocDownloader {
       .replace(/<script[^>]*>.*?<\/script>/gs, '') // Remove any remaining scripts
       .replace(/<style[^>]*>.*?<\/style>/gs, '') // Remove any remaining styles
       .replace(/--[\w-]+:\s*[^;]+;/g, '') // Remove CSS custom properties
+      .replace(/data-[\w-]+="[^"]*"/g, '') // Remove data attributes
+      .replace(/class="[^"]*"/g, '') // Remove class attributes for cleaner conversion
+      .replace(/style="[^"]*"/g, '') // Remove inline styles
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
   }
@@ -364,9 +408,12 @@ export class DocDownloader {
       return;
     }
     
-    // Add metadata header
-    const header = `---\nsource_url: ${sourceUrl}\ndownloaded_at: ${new Date().toISOString()}\n---\n\n`;
-    const content = header + markdown;
+    // Conditionally add metadata header
+    let content = markdown;
+    if (this.includeMetadata) {
+      const header = `---\nsource_url: ${sourceUrl}\ndownloaded_at: ${new Date().toISOString()}\n---\n\n`;
+      content = header + markdown;
+    }
     
     // Ensure directory exists
     await fs.ensureDir(path.dirname(filePath));

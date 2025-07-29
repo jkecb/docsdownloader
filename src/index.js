@@ -24,6 +24,7 @@ program
   .option('-d, --depth <number>', 'Maximum crawl depth', '3')
   .option('--force', 'Force re-download even if files exist')
   .option('--config <file>', 'Configuration file for site-specific settings')
+  .option('--metadata', 'Include metadata header with source URL and download time')
   .action(async (options) => {
     try {
       console.log(chalk.blue('🚀 Starting documentation download...'));
@@ -35,7 +36,8 @@ program
         maxDepth: parseInt(options.depth),
         outputDir: options.output,
         force: options.force,
-        configFile: options.config
+        configFile: options.config,
+        includeMetadata: options.metadata
       });
       
       await downloader.download(options.url);
@@ -53,6 +55,7 @@ program
   .option('-o, --output <dir>', 'Output directory', './downloads')
   .option('-d, --depth <number>', 'Maximum crawl depth', '3')
   .option('--force', 'Force re-download even if files exist')
+  .option('--metadata', 'Include metadata header with source URL and download time')
   .action(async (options) => {
     try {
       console.log(chalk.blue('🚀 Starting bulk documentation download...'));
@@ -75,7 +78,8 @@ program
       const downloader = new DocDownloader({
         maxDepth: parseInt(options.depth),
         outputDir: options.output,
-        force: options.force
+        force: options.force,
+        includeMetadata: options.metadata
       });
       
       for (const url of urls) {

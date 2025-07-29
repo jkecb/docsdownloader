@@ -90,3 +90,5 @@ Desktop.ini
 downloads/
 *.json.bak
 .claude
+
+env.md

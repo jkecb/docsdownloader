@@ -51,12 +51,14 @@ npm run download -- bulk --file ../env.md --output ./downloads --depth 3
 - `-d, --depth <number>`: Maximum crawl depth (default: 3)
 - `--force`: Force re-download even if files exist
 - `--config <file>`: Configuration file for site-specific settings
+- `--metadata`: Include metadata header with source URL and download time
 
 #### Bulk Download
 - `-f, --file <file>`: Environment file with URLs (default: ../env.md)
 - `-o, --output <dir>`: Output directory (default: ./downloads)
 - `-d, --depth <number>`: Maximum crawl depth (default: 3)
 - `--force`: Force re-download even if files exist
+- `--metadata`: Include metadata header with source URL and download time
 
 ## Configuration
 
@@ -97,7 +99,7 @@ downloads/
 └── ...
 ```
 
-Each markdown file includes metadata:
+By default, files contain only the markdown content. With the `--metadata` option, each file includes metadata:
 
 ```markdown
 ---
@@ -125,7 +127,7 @@ The downloader works with most documentation sites. Pre-configured for common AP
 3. **Markdown Detection**: Checks for existing markdown versions first
 4. **HTML Conversion**: Converts HTML to markdown using Turndown
 5. **File Organization**: Saves files in organized directory structure
-6. **Metadata**: Adds source URL and download timestamp to each file
+6. **Clean Output**: Saves clean markdown files (metadata optional with --metadata flag)
 
 ## Limitations
 
