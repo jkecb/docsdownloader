@@ -1,0 +1,7 @@
+{
+  "docs.example.com": {
+    "contentSelector": ".markdown-body, .content, main",
+    "skipPatterns": ["/api/", "/changelog"],
+    "maxDepth": 4
+  }
+}
