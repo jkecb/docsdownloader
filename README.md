@@ -20,15 +20,6 @@ npm install
 
 ## Usage
 
-### Recommended usage
-First, install claude code.
-
-Then,
-```bash
-claude --dangerously-skip-permissions
-Claude mom i want docs.example.com, please!
-```
-
 ### Single Site Download
 
 ```bash
