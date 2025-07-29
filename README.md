@@ -77,12 +77,12 @@ Downloaded documentation is organized by site:
 
 ```
 downloads/
-├── docs_sim_dune_com/
+├── docs_example_com/
 │   ├── index.md
 │   ├── quickstart.md
 │   └── api/
 │       └── reference.md
-├── www_alchemy_com/
+├── docs_example2_com/
 │   ├── index.md
 │   └── docs/
 │       └── reference/
