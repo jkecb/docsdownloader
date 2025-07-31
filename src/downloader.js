@@ -99,11 +99,20 @@ export class DocDownloader {
       this.findAndQueueLinks($, url, baseUrl, depth);
     }
     
+    const hostname = baseUrl.hostname;
+    const config = this.siteConfig[hostname] || {};
+    
     // Check if markdown version exists
     const mdUrl = await this.checkForMarkdownVersion(url);
     if (mdUrl) {
       console.log(chalk.green(`${'  '.repeat(depth)}📝 Found markdown version: ${mdUrl}`));
       await this.downloadMarkdown(mdUrl, url, siteDir);
+      return;
+    }
+    
+    // If preferMarkdown is set and no markdown found, skip conversion
+    if (config.preferMarkdown) {
+      console.log(chalk.yellow(`${'  '.repeat(depth)}⚠️ No markdown version found, skipping HTML conversion (preferMarkdown: true)`));
       return;
     }
     
@@ -124,28 +133,77 @@ export class DocDownloader {
   async checkForMarkdownVersion(url) {
     // Try the most likely .md version first
     const baseUrl = url.replace(/\/$/, '');
+    const urlObj = new URL(url);
+    
     const possibleMdUrls = [
       baseUrl + '.md',
       baseUrl + '/index.md',
+      baseUrl + '/README.md',
+      baseUrl + '/content.md',
       url.replace(/\.html?$/, '.md'),
-      url + '.md'
+      url + '.md',
+      url + '/index.md',
+      // For GitHub-style raw content
+      url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/'),
+      // For GitLab raw content
+      url.replace(/\/blob\//, '/raw/'),
+      // Try with common documentation paths
+      baseUrl.replace(/\/docs?\//, '/docs/') + '.md',
+      baseUrl.replace(/\/guide?\//, '/guide/') + '.md'
     ];
     
     for (const mdUrl of possibleMdUrls) {
       try {
-        const response = await axios.head(mdUrl, {
-          timeout: 8000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-          },
-          maxRedirects: 5
-        });
-        if (response.status === 200) {
+        // Try HEAD request first for efficiency
+        let response;
+        try {
+          response = await axios.head(mdUrl, {
+            timeout: 8000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            },
+            maxRedirects: 5
+          });
+        } catch (headError) {
+          // If HEAD fails, try GET with small range to check if file exists
+          response = await axios.get(mdUrl, {
+            timeout: 8000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              'Range': 'bytes=0-1023' // Only get first 1KB to check content
+            },
+            maxRedirects: 5
+          });
+        }
+        
+        if (response.status === 200 || response.status === 206) {
           const contentType = response.headers['content-type']?.toLowerCase() || '';
-          // Only accept if it's actually markdown or plain text, not HTML
-          if ((contentType.includes('text/plain') || contentType.includes('markdown')) && 
-              !contentType.includes('text/html')) {
-            return mdUrl;
+          
+          // If we have actual content from GET request, check if it looks like markdown
+          if (response.data) {
+            const content = response.data.toString().trim();
+            const isMarkdown = this.isLikelyMarkdown(content);
+            const isHtml = content.startsWith('<!DOCTYPE html') || 
+                          content.startsWith('<html') || 
+                          contentType.includes('text/html');
+            
+            if (isMarkdown && !isHtml) {
+              return mdUrl;
+            }
+          } else {
+            // For HEAD requests, use more relaxed content-type checking
+            const isLikelyMarkdown = contentType.includes('text/plain') || 
+                                   contentType.includes('markdown') ||
+                                   contentType.includes('text/markdown') ||
+                                   contentType.includes('application/octet-stream') ||
+                                   contentType === '' || // Some servers don't set content-type
+                                   mdUrl.endsWith('.md');
+            
+            const isHtml = contentType.includes('text/html');
+            
+            if (isLikelyMarkdown && !isHtml) {
+              return mdUrl;
+            }
           }
         }
       } catch (error) {
@@ -154,6 +212,31 @@ export class DocDownloader {
     }
     
     return null;
+  }
+  
+  isLikelyMarkdown(content) {
+    if (!content || content.length < 10) return false;
+    
+    // Check for common markdown patterns
+    const markdownPatterns = [
+      /^#{1,6}\s+/, // Headers
+      /^\*\s+/, // Bullet lists
+      /^\d+\.\s+/, // Numbered lists
+      /\[.*?\]\(.*?\)/, // Links
+      /`[^`]+`/, // Inline code
+      /```/, // Code blocks
+      /^\>\s+/, // Blockquotes
+      /\*\*.*?\*\*/, // Bold
+      /\*.*?\*/, // Italic
+      /^---$|^===$/m, // Horizontal rules
+      /^\|.*\|/m // Tables
+    ];
+    
+    // Check if content has markdown-like patterns and isn't HTML
+    const hasMarkdownPatterns = markdownPatterns.some(pattern => pattern.test(content));
+    const hasHtmlTags = /<\/?[a-z][\s\S]*>/i.test(content);
+    
+    return hasMarkdownPatterns || (!hasHtmlTags && content.includes('\n') && content.length > 50);
   }
   
   async downloadMarkdown(mdUrl, originalUrl, siteDir) {
@@ -232,6 +315,11 @@ export class DocDownloader {
   extractContent($, url) {
     const hostname = new URL(url).hostname;
     const config = this.siteConfig[hostname] || {};
+    
+    // If config specifies to prefer markdown, skip HTML conversion entirely
+    if (config.preferMarkdown) {
+      return '';
+    }
     
     // Remove unwanted elements first
     $('script, style, nav, footer, .sidebar, .navigation, .menu, .navbar, .header, .topbar, .search, .breadcrumb, .table-of-contents, .toc, .banner').remove();

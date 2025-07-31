@@ -3,5 +3,11 @@
     "contentSelector": ".markdown-body, .content, main",
     "skipPatterns": ["/api/", "/changelog"],
     "maxDepth": 4
+  },
+  "alchemy.com": {
+    "contentSelector": ".markdown-body, .content, main, article",
+    "skipPatterns": ["/blog", "/changelog"],
+    "maxDepth": 5,
+    "preferMarkdown": true
   }
 }
